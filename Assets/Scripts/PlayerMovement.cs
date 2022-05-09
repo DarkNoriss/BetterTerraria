@@ -18,6 +18,7 @@ public class PlayerMovement : MonoBehaviour {
     [SerializeField] private float decceleration;
     [SerializeField] private float velPower;
     [SerializeField] private float frictionAmount;
+    private float moveInput;
     #endregion
 
     #region JUMP
@@ -37,10 +38,11 @@ public class PlayerMovement : MonoBehaviour {
     [SerializeField] private LayerMask groundLayer;
     #endregion
 
-    private enum MovmentState { idle, running, jumping, falling, attacking }
-    private MovmentState playerState = MovmentState.idle;
+    #region PLAYER STATES
+    private enum MovementState { idle, running, jumping, falling, attacking }
+    private MovementState playerState = MovementState.idle;
+    #endregion
 
-    //loading components in Awake() 
     private void Awake() {
         //fetch the Rigidbody component attached to the Player
         playerRb = GetComponent<Rigidbody2D>();
@@ -53,10 +55,11 @@ public class PlayerMovement : MonoBehaviour {
     }
     private void Start() {
 
-        //InputHandler.instance.OnJumpPressed;
     }
 
     private void Update() {
+        UpdateAnimation();
+
         #region TIMER
         //timer for last time grounder and last time jump
         lastGroundedTime -= Time.deltaTime;
@@ -65,20 +68,16 @@ public class PlayerMovement : MonoBehaviour {
 
         #region PHYSICS CHECKS
         //if not jumping
-        if (playerState != MovmentState.jumping) {
+        if (playerState != MovementState.jumping) {
             //ground check
             if (Physics2D.BoxCast(playerColl.bounds.center, playerColl.bounds.size, 0f, Vector2.down, .01f, groundLayer)) {
                 lastGroundedTime = jumpCoyoteTime;
+            } else {
             }
         }
         #endregion
 
         #region JUMP CHECK
-        //check if player is already jumping and if his velocity is lower then 0 means hes falling
-        if (playerState == MovmentState.jumping && playerRb.velocity.y < 0) {
-            playerState = MovmentState.falling;
-        }
-
         if (CanJump() && lastJumpTime > 0) {
             Jump();
         }
@@ -87,83 +86,25 @@ public class PlayerMovement : MonoBehaviour {
         #region CHECK FOR INPUT
         InputHandler();
         #endregion
+
+
     }
 
-    // private void FixedUpdate() {
-    //     float moveInput = Input.GetAxis("Horizontal");
-
-    //     #region RUN
-    //     if (playerRb.bodyType == RigidbodyType2D.Dynamic) {
-    //         //calculate the direction we want to move in and our desired velocity
-    //         float tagetSpeed = moveInput * moveSpeed;
-
-    //         //calculate difference between current velocity and desired velocity
-    //         float speedDif = tagetSpeed - playerRb.velocity.x;
-
-    //         //change acceleration rate depending on situation
-    //         float accelRate = (Mathf.Abs(tagetSpeed) > 0.01f) ? acceleration : decceleration;
-
-    //         //applies acceleraion to speed difference, the raises to a set power so acceleration increases with higher speeds
-    //         //finally multiplies by sign to reapply direction
-    //         float movement = Mathf.Pow(Mathf.Abs(speedDif) * accelRate, velPower) * Mathf.Sign(speedDif);
-
-    //         //applies force to rigidbody, multiplying by Vector2.right (Shorthand for writing Vector2(1, 0)) 
-    //         //so that it only affects X axis
-    //         playerRb.AddForce(movement * Vector2.right);
-    //     }
-    //     #endregion
-
-    //     #region FRICTION
-    //     //check if were grounded and that we are trying to stop (not pressing forwards and backwards)
-    //     if (lastGroundedTime > 0 && Mathf.Abs(moveInput) < 0.01f) {
-    //         //then we use either the friction amount (~0.2) or our velocity
-    //         float amount = Mathf.Min(Mathf.Abs(playerRb.velocity.x), Mathf.Abs(frictionAmount));
-    //         //sets to movement direction
-    //         amount *= Mathf.Sign(playerRb.velocity.x);
-    //         //applies force against movement direction
-    //         playerRb.AddForce(Vector2.right * -amount, ForceMode2D.Impulse);
-    //     }
-    //     #endregion
-
-    //     #region JUMP
-    //     //checks if was last grounded within coyoteTime and that jump has been pressed within bufferTime
-    //     if (lastGroundedTime > 0 && lastJumpTime > 0 && !isJumping) {
-    //         Debug.Log("jump!");
-    //         Jump();
-    //     }
-    //     #endregion
-
-    //     #region GROUNDED
-
-    //     #endregion
-
-    //     UpdateAnimation(moveInput);
-    // }
-
-    private void UpdateAnimation(float posX) {
-        if (posX > 0f) {
-            playerState = MovmentState.running;
-            playerSprite.flipX = false;
-
-        } else if (posX < 0f) {
-            playerState = MovmentState.running;
-            playerSprite.flipX = true;
-        } else {
-            playerState = MovmentState.idle;
-        }
-
-        playerAnim.SetInteger("state", (int)playerState);
+    private void FixedUpdate() {
+        #region RUN
+        Run();
+        #endregion
     }
 
     private bool CanJump() {
-        return lastGroundedTime > 0 && playerState != MovmentState.jumping;
+        return lastGroundedTime > 0 && playerState != MovementState.jumping;
     }
     private void Jump() {
         //make sure we cant jump multiple times
         lastJumpTime = 0;
         lastGroundedTime = 0;
 
-        playerState = MovmentState.jumping;
+        playerState = MovementState.jumping;
 
         #region  PERFORM JUMP
         float force = jumpForce;
@@ -173,14 +114,59 @@ public class PlayerMovement : MonoBehaviour {
         playerRb.AddForce(Vector2.up * force, ForceMode2D.Impulse);
         #endregion
     }
+    private void Run() {
+        if (moveInput > 0.01f || moveInput < -0.01f) {
+            //calculate the directions and velocity
+            float targetSpeed = moveInput * moveSpeed;
+            //calculate difference betwee current velocity and desired velocity
+            float speedDif = targetSpeed - playerRb.velocity.x;
+
+            #region ACCELERATION
+            //gets an acceleration value based on if we are acceleratin or deccelerating
+            float acceleraionRate = (Mathf.Abs(targetSpeed) > 0.01f) ? acceleration : decceleration;
+
+            //if we want to run but are already going faster than max run speed
+            // if ((playerRb.velocity.x > targetSpeed && targetSpeed > 0.01f) || playerRb.velocity.x < targetSpeed && targetSpeed < -0.01f) {
+            //     acceleraionRate = 0;
+            // }
+            #endregion
+
+            float movement = Mathf.Pow(Mathf.Abs(speedDif) * acceleraionRate, velPower) * Mathf.Sign(speedDif);
+            Debug.Log("player speed " + movement);
+            playerRb.AddForce(movement * Vector2.right);
+        }
+    }
 
 
 
     #region INPUTHANDLER CUZ I DONT WANT TO MAKE A NEW CLASS YET PLZ MOVE IT LATER AND DONT FORGET
     private void InputHandler() {
-        if (Input.GetButtonDown("Jump") && playerState != MovmentState.jumping) {
+        moveInput = Input.GetAxis("Horizontal");
+
+        if (Input.GetButtonDown("Jump") && playerState != MovementState.jumping) {
             lastJumpTime = jumpBufferTime;
         }
     }
     #endregion
+
+    private void UpdateAnimation() {
+
+        if (moveInput > 0f) {
+            playerState = MovementState.running;
+            playerSprite.flipX = false;
+        } else if (moveInput < 0f) {
+            playerState = MovementState.running;
+            playerSprite.flipX = true;
+        } else {
+            playerState = MovementState.idle;
+        }
+
+        if (playerRb.velocity.y > 0.01f) {
+            playerState = MovementState.jumping;
+        } else if (playerRb.velocity.y < -0.01f) {
+            playerState = MovementState.falling;
+        }
+        Debug.Log(playerState);
+        playerAnim.SetInteger("state", (int)playerState);
+    }
 }
